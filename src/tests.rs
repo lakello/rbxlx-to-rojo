@@ -73,7 +73,7 @@ impl InstructionReader for VirtualFileSystem {
                     }
                 };
 
-                let contents_string = String::from_utf8_lossy(&contents).into_owned();
+                let contents_string = String::from_utf8_lossy(&contents).replace("\r\n", "\n");
                 let rbxmx = filename.ends_with(".rbxmx");
                 system.files.insert(
                     filename,
@@ -82,8 +82,8 @@ impl InstructionReader for VirtualFileSystem {
                             let tree = rbx_xml::from_str_default(&contents_string)
                                 .expect("couldn't decode encoded xml");
                             let child_id = tree.root().children()[0];
-                            let child_instance = tree.get_by_ref(child_id).unwrap().clone();
-                            VirtualFileContents::Instance(child_instance.properties.to_owned())
+                            let child_instance = tree.get_by_ref(child_id).unwrap();
+                            VirtualFileContents::Instance(child_instance.properties.iter().map(|(key, value)| (key.to_string(), value.clone())).collect())
                         } else {
                             VirtualFileContents::Bytes(contents_string)
                         },
@@ -102,6 +102,16 @@ impl InstructionReader for VirtualFileSystem {
             }
         }
     }
+}
+
+#[test]
+fn decodes_modern_zstd_binary() {
+    let tree = rbx_dom_weak::WeakDom::new(rbx_dom_weak::InstanceBuilder::new("Folder"));
+    let mut bytes = Vec::new();
+    rbx_binary::to_writer(&mut bytes, &tree, &[tree.root_ref()]).unwrap();
+
+    let decoded = rbx_binary::from_reader(bytes.as_slice()).unwrap();
+    assert_eq!(decoded.root().class, "DataModel");
 }
 
 #[test]
